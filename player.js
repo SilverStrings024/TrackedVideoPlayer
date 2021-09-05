@@ -11,16 +11,36 @@
 
 import { Timer } from './timers';
 
+// Initialize the players array and manager if they don't already exist
+window.onload(() => {
+    globalThis.playerManager = globalThis.playerManager || new PlayerManager(channel=new BroadcastChannel("playerManager"));
+    globalThis.players = globalThis.players || [];
+})
+
 /**
 * TODO
 *
+** Generate a unique id on player creation
+*
+** Implement broadcast channels to implement the next todo item
+*
+** Create handler that stops any currently playing video when the user wants to start a different one
+*
+** Implement "replaceWithThumbnail" to allow the ability to remove a rendered player, store its last position, then replace it with some thumbnail
+** Note that, on click of the thumbnail that replaced the player, a new player is to be instantiated and started at the stored position
+*
+** Finish channel things
+*
+** Handle html injection
 */
 class PlayerManager{
 
-    constructor(){
+    // Require a channel
+    constructor(channel){
+        this.channel = channel;
+        this.channel.onmessage = this.receive(e)
+        this.playing = [];
         this.stats;
-        // Holds ids of each rendered player
-        this.players = globalThis.players || [];
     }
 
     collectVideoInfo()
@@ -34,11 +54,45 @@ class PlayerManager{
         }
         return data
     }
+
+    createPlayer(id=null){
+        if (id === null){
+            // generate a new id
+        }
+    }
+
+    // Channel handling
+    send(message){
+        this.channel.postMessage(message)
+    }
+
+    receive(event){
+        const message = event.data
+        if (message.indexOf("kill") !== -1){
+            // Kill whatever player
+            const player = document.getElementById(message.split("-")[-1]);
+            player.pause();
+            this.replaceWithThumbnail(player)
+        }
+        else if (message.indexOf('starting') !== -1){
+            // Stop any currently playing videos
+        }
+
+    }
+
+    replaceWithThumbnail(player){
+        // Get the image from the player
+        // Pause the player
+        // Store the elapsed time
+        // Destroy the player html
+        // Replace the player with its thumbnail
+    }
 }
 
 /**
  * TODO
  *
+ ** Add thumbnail src with onclick event that replaces the thumbnail with the actual player then start the video right after replacing.
  *
  ** Remove all project specific code
  *
@@ -48,11 +102,9 @@ class PlayerManager{
  *
  ** Implement the ability to define a "sendBeacon" method for users
  *
- ** Remove segments that skip forward then back to where they were
+ ** Remove segments that skip forward then back to where they were (essentially voiding the skip)
  * 
  ** Allow skipping ahead or back by 5 seconds via button or arrow key (don't forget to add the skip to the seeks Object)
- *
- ** Make volume buttons into a slider
  *
  ** Allow custom error message
  *
@@ -60,6 +112,8 @@ class PlayerManager{
  *
  * [OPTIONAL]
  ** Implement clip highlighting in the seek bar
+ *
+ ** Make volume buttons into a slider (NOTE: This could be useful for figuring out if your audience wants you to be louder)
  *
  ** Implement tracking for over amplification attempts (only needed if not using a slider for volume)
 */
