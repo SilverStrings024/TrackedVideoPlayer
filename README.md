@@ -1,5 +1,5 @@
 ## WARNINGS
-This player uses the `BroadcastChannel` web API which is **NOT** compatible with some browsers. [Refer to the compatibility chart](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API)<br/>
+This player uses the `BroadcastChannel` web API which is **NOT** compatible with some browsers. [Refer to the compatibility chart](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API#browser_compatibility)<br/>
 **This is NOT DONE** and has 0 optimizations. Unless you fix it yourself, I would highly recommend not using this in anything except personal/practice projects.
 
 
