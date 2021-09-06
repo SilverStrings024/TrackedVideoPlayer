@@ -1,5 +1,5 @@
 ## WARNINGS
-This player uses the `BroadcastChannel` web API which is **NOT** compatible with some browsers. [Refer to the compatibility chart](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API)
+This player uses the `BroadcastChannel` web API which is **NOT** compatible with some browsers. [Refer to the compatibility chart](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API)<br/>
 **This is NOT DONE** and has 0 optimizations. Unless you fix it yourself, I would highly recommend not using this in anything except personal/practice projects.
 
 
@@ -34,7 +34,7 @@ You can provide a thumbnail for the video to display but if you don't the use wi
 ### Culling Videos [**NOT IMPLEMENTED**]
 To prevent a memory leak/too much consumption, the player manager will keep track of all rendered/injected video players. Each time a new video is injected, the Player Manager will check and see how many videos are currently loaded; if there will be more than 3 videos that would be loaded after injecting the new one, it will check if any videos are outside of the viewport. If any videos are indeed outside of the view port, then it will record the elapsed time of the player, destroy its html and all references to its object, then it will replace the html with the default "thumbnail" or the thumbnail you provided.<br/>
 
-##### How about multiple windows?
+#### How about multiple windows?
 Let's say the user opens 4 seperate windows and tries to have each window load a video.
 In this case, the manager will notice that more than the default max amount of videos are in the viewport; it will then take the video that was loaded first and cull it. This means that the user **will** see the video get replaced with the thumbnail.
 If you don't want that the user to see this happen, raise the max amount of videos that can be loaded at once but remember; the more videos that are loaded, the more memory will be used.
