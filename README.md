@@ -18,6 +18,7 @@ This video player is fully self contained, records how long a person has watched
 
 If you find a way to cheat the player please either submit a pull request or an issue and I will get to it asap!
 
+** Ignore everything from here down **
 ### Usage
 To start, you'll need to do the normal thing and place `<script src='/place/you/put/it/'></script>` wherever you like (I'm partial to the head tag).
 To actually use the script you'll need to add an onclick event to whatever element is to be replaced. This onlick must call `globalThis.playerManager.injectVideo(this, <src here>, <optional id here>)` .
