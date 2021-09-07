@@ -25,8 +25,7 @@ To start, you'll need to do the normal thing and either clone the repo somewhere
 
 Alternatively, you can do the following in your head tag
 
-Load the player - `<script src="https://cdn.jsdelivr.net/gh/SilverStrings024/TrackedVideoPlayer/player.js"></script>`<br>
-Load the timer - `<script src="https://cdn.jsdelivr.net/gh/SilverStrings024/TrackedVideoPlayer/timer.js"></script>`
+Load the player - `<script src="https://cdn.jsdelivr.net/gh/SilverStrings024/TrackedVideoPlayer/player.js"></script>`
 
 To actually use the script you'll need to add an onclick event to whatever element is to hold the video.<br/>
 
