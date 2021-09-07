@@ -17,7 +17,6 @@
                     console.log("Attempting to append child", i);
                     document.getElementById('players').innerHTML = document.getElementById('players').innerHTML + "<div class='container'><img src='../defaultThumb.png' onclick='injectPlayer(this)' id='"+i+"'+/></div><br/>";
                 }
-                document.getElementById('players').innerHTML = document.getElementById('players').innerHTML + "WHY?!"
             })
             function injectPlayer(elem){
                 console.log("Injecting player...")
