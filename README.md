@@ -21,6 +21,8 @@ If you find a way to cheat the player please either submit a pull request or an 
 
 ## **Ignore everything from here down** - because this isn't done and this file is a WIP
 ### Usage
+[ **NOTE** ] This will attempt to replace the `innerHtml` of the parent node of whatever element holds the onclick that will inject the player, please account for this in your page source code.
+
 To start, you'll need to do the normal thing and either clone the repo somewhere into your project then load player.js into your html
 
 Alternatively, you can do the following in your head tag
@@ -30,7 +32,7 @@ Load the player - `<script src="https://cdn.jsdelivr.net/gh/SilverStrings024/Tra
 To actually use the script you'll need to add an onclick event to whatever element is to hold the video.<br/>
 
 
-This onlick must call `globalThis.playerManager.injectVideo(this, <src here>, <optional id here>)`.
+This onlick must call `window.playerManager.injectVideo(this, <src here>, <optional id here>)` whether in its own function or in the onclick attribute of your element.
 
 
 We pass `this` so the player manager has access to the element (so it can inject the player as its child). You **can** pass an optional id that the player will use both in JS and in its HTML; this is mainly in case you're using something like Django where you may want to give an element an id of something like `{{video.name}}`.
