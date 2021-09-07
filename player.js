@@ -9,18 +9,23 @@
 * @copyright Matthew Amstutz 2021
 */
 
-import { Timer } from './timers';
-
 // Initialize the players array and manager if they don't already exist
 window.onload(() => {
-    globalThis.playerManager = globalThis.playerManager || new PlayerManager(channel=new BroadcastChannel("playerManager"));
-    globalThis.players = globalThis.players || [];
+    globalThis.playerManager = globalThis.playerManager || new PlayerManager(channel = new BroadcastChannel("playerManager"));
+})
+window.onbeforeunload(() => {
+    globalThis.playerManager.closeChannel();
 })
 
 /**
 * TODO
 *
+** Put ViewPort tracking/checking in the manager instead of the player; record the mid point of the player in x/y and use
+** the coords to determine if we need to remove the player.
+*
 ** Generate a unique id on player creation
+*
+** Create method to dump stats and reinstate them on player destruction/reconstruction
 *
 ** Implement broadcast channels to implement the next todo item
 *
@@ -33,64 +38,122 @@ window.onload(() => {
 *
 ** Handle html injection
 */
-class PlayerManager{
+class PlayerManager {
 
     // Require a channel
-    constructor(channel){
+    constructor(channel) {
         this.channel = channel;
-        this.channel.onmessage = this.receive(e)
+        this.channel.onmessage = this.receive(e);
+        // Holds player ids, thumbnail src, elapsed time, and last known stats
+        this.players = {};
         this.playing = [];
         this.stats;
+        this.bindEvents();
     }
 
-    collectVideoInfo()
-    {
+    collectVideoInfo() {
         // Collect all the information possible
         var data = {}
-        for ( let usedPlayer of globalThis.usedPlayers)
-        {
+        for (let usedPlayer of this.players) {
             // produces {1: {'timeWatched': 2000, 'timeSeeked': 1000}, 2: {'progress': "50%", 'timeWatched': 10000}}
-            data[usedPlayer.id] = usedPlayer.getStats()
+            data[usedPlayer.id] = usedPlayer.getStats();
         }
         return data
     }
 
-    createPlayer(id=null){
-        if (id === null){
+    createPlayer(id = null) {
+        if (id === null) {
             // generate a new id
         }
     }
 
     // Channel handling
-    send(message){
-        this.channel.postMessage(message)
+
+    closeChannel() {
+        this.channel.close();
     }
 
-    receive(event){
+    send(message) {
+        this.channel.postMessage(message);
+    }
+
+    receive(event) {
         const message = event.data
-        if (message.indexOf("kill") !== -1){
+        if (message.indexOf("kill") !== -1) {
             // Kill whatever player
             const player = document.getElementById(message.split("-")[-1]);
-            player.pause();
-            this.replaceWithThumbnail(player)
+            this.replaceWithThumbnail(player);
         }
-        else if (message.indexOf('starting') !== -1){
-            // Stop any currently playing videos
+        else if (message.indexOf('starting') !== -1) {
+            // Stop any currently playing videos that don't have
+            // the id of the player that's starting
+        }
+        else if (!message) {
+
         }
 
     }
 
-    replaceWithThumbnail(player){
+    replaceWithThumbnail(player) {
         // Get the image from the player
         // Pause the player
-        // Store the elapsed time
+        // Store the elapsed time (if it's less then the video length)
         // Destroy the player html
         // Replace the player with its thumbnail
+    }
+
+    injectVideo(parentElemId, src, videoId="") {
+        // Add a new key to this.players and run cullPlayers;
+        this.players[parentElemId] = {};
+        this.cullPlayers();
+        let player = new VideoPlayer(src=src, id=videoId);
+        this.players[videoId] = {
+            'object': player,
+            'src': src,
+            'parent': parentElemId,
+            'id': videoId
+        }
+    }
+
+    isInViewPort(playerElem) {
+        var rect = playerElem.getBoundingClientRect();
+        return (
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+            rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+        );
+    }
+
+    cullPlayers() {
+        // Do we need to cull?
+        if (Object(this.players).keys().length > this.maxPlayers){
+            let mustCull = [];
+            for (let player of this.players){
+                const playerElem = document.getElementById(player.id);
+                if(!this.isInViewPort(playerElem)){
+                    player.object = null;
+                    // Record info
+                    // Destroy player html
+                    // Remove reference to object
+                    continue
+                }
+                mustCull.append(playerElem);
+
+            }
+            // If we still have more than the max, remove the oldest ones
+        }
+    }
+
+    bindEvents() {
     }
 }
 
 /**
  * TODO
+ *
+ ** Put ViewPort tracking/checking in the manager instead of the player; record the mid point of the player in x/y and use
+ ** the coords to determine if we need to remove the player.
  *
  ** Add thumbnail src with onclick event that replaces the thumbnail with the actual player then start the video right after replacing.
  *
@@ -117,14 +180,12 @@ class PlayerManager{
  *
  ** Implement tracking for over amplification attempts (only needed if not using a slider for volume)
 */
-export class VideoPlayer
-{
+export class VideoPlayer {
     /** 
     * @param {String} src - The URL source of the video
     * @param {String} id - Auto generated or given player id
     */
-    constructor(src, id)
-    {
+    constructor(src, id) {
         this.isInViewPort;
         this.completionPercentage;
         // Used to record where they "dropped the play head" from the start
@@ -145,8 +206,9 @@ export class VideoPlayer
 
         this.src = src;
         this.id = id;
+        this.coords;
         this.timer = new Timer();
-        this.seeks = {"pos": [], "neg": []};
+        this.seeks = { "pos": [], "neg": [] };
         this.times = {
             // How long was the video in the viewport
             "viewPort": {
@@ -162,39 +224,38 @@ export class VideoPlayer
             },
             // How long was the video out of focus, playing and not muted
             'focus': {
-
+                'started': 0,
+                'segments': []
             }
         }
     }
 
-    initialize()
-    {
+    initialize() {
         // This assumes that the player html has already been injected into the page.
-        this.video = document.getElementById(this.id+"-video")
-        this.progress = document.getElementById(this.id+"-progress");
-        this.progressBar = document.getElementById(this.id+"-progress-bar");
+        this.video = document.getElementById(this.id + "-video")
+        this.progress = document.getElementById(this.id + "-progress");
+        this.progressBar = document.getElementById(this.id + "-progress-bar");
 
         // Controls
         this.video.controls = false;
-        this.controls = document.getElementById(this.id+"-video-controls")
+        this.controls = document.getElementById(this.id + "-video-controls")
         this.controls.style.display = "block";
 
         // Containers
-        this.playerContainer = document.getElementById(this.id+"-player-container")
-        this.videoContainer = document.getElementById(this.id+"-video-container");
+        this.playerContainer = document.getElementById(this.id + "-player-container")
+        this.videoContainer = document.getElementById(this.id + "-video-container");
 
         // Buttons
-        this.fullScreenBtn = document.getElementById(this.id+"-full-screen");
-        this.playPauseBtn = document.getElementById(this.id+"-play-pause");
-        this.stop = document.getElementById(this.id+"-stop");
-        this.muteBtn = document.getElementById(this.id+"-mute");
-        this.volUp = document.getElementById(this.id+"-vol-up");
-        this.volDown = document.getElementById(this.id+"-vol-dwn");
+        this.fullScreenBtn = document.getElementById(this.id + "-full-screen");
+        this.playPauseBtn = document.getElementById(this.id + "-play-pause");
+        this.stop = document.getElementById(this.id + "-stop");
+        this.muteBtn = document.getElementById(this.id + "-mute");
+        this.volUp = document.getElementById(this.id + "-vol-up");
+        this.volDown = document.getElementById(this.id + "-vol-dwn");
         // If we can't play the video, remove the player container and tell the
         // user that we can't play it. Maybe give them a link to the youtube video
-        if (!this.video.canPlayType)
-        {
-            var failed = `<div id="unsupported-video">Unsupported video! You can find it <a class="text-blue-700" href="`+ this.src +`">here</a></div>`
+        if (!this.video.canPlayType) {
+            var failed = `<div id="unsupported-video">Unsupported video! You can find it <a class="text-blue-700" href="` + this.src + `">here</a></div>`
             this.playerContainer.parentNode.appendChild(failed);
             this.playerContainer.parentNode.removeChild(this.playerContainer);
         }
@@ -205,59 +266,44 @@ export class VideoPlayer
         this.playerContainer.setAttribute('data-fullscreen', !!state);
     }
 
-    videoInViewport() {
-        var elementHeight = element.offsetHeight;
-        var elementWidth = element.offsetWidth;
-        var bounding = element.getBoundingClientRect();
-        if (
-            bounding.top >= -elementHeight
-            && bounding.left >= -elementWidth
-            && bounding.right <= (window.innerWidth || document.documentElement.clientWidth) + elementWidth
-            && bounding.bottom <= (window.innerHeight || document.documentElement.clientHeight) + elementHeight
-            ){ return true; }
-        return false;
-    }
-
-    handleFullScreen()
-    {
+    handleFullScreen() {
         if (this.isFullScreen()) {
-            if (document.exitFullscreen){
+            if (document.exitFullscreen) {
                 document.exitFullscreen();
-            }else if (document.mozCancelFullScreen){
+            } else if (document.mozCancelFullScreen) {
                 document.mozCancelFullScreen();
-            }else if (document.webkitCancelFullScreen){
+            } else if (document.webkitCancelFullScreen) {
                 document.webkitCancelFullScreen();
-            }else if (document.msExitFullscreen){
+            } else if (document.msExitFullscreen) {
                 document.msExitFullscreen();
             }
             setFullscreenData(false);
-         }
-         else {
-            if (videoContainer.requestFullscreen){
+        }
+        else {
+            if (videoContainer.requestFullscreen) {
                 videoContainer.requestFullscreen();
-            }else if (videoContainer.mozRequestFullScreen){
+            } else if (videoContainer.mozRequestFullScreen) {
                 videoContainer.mozRequestFullScreen();
-            }else if (videoContainer.webkitRequestFullScreen){
+            } else if (videoContainer.webkitRequestFullScreen) {
                 videoContainer.webkitRequestFullScreen();
-            }else if (videoContainer.msRequestFullscreen){
+            } else if (videoContainer.msRequestFullscreen) {
                 videoContainer.msRequestFullscreen();
             }
             setFullscreenData(true);
-         }
-      }
+        }
+    }
 
-    alterVolume(direction)
-    {
+    alterVolume(direction) {
         var currentVolume = Math.floor(this.video.volume * 10) / 10;
-        if (direction === "+"){
-            if (currentVolume < 1){
+        if (direction === "+") {
+            if (currentVolume < 1) {
                 this.video.volume += 0.1;
-            }else{
+            } else {
                 console.log("\n\nAttempted to go over max volume\n\n")
             }
         }
-        else if (dir === "-"){
-            if (currentVolume > 0){
+        else if (dir === "-") {
+            if (currentVolume > 0) {
                 this.video.volume -= 0.1;
             }
         } else {
@@ -265,14 +311,12 @@ export class VideoPlayer
         }
     }
 
-    pauseVideo()
-    {
+    pauseVideo() {
         this.playPauseBtn.innerHtml = "Play";
         this.timer.stop();
         this.video.pause();
         // Handle viewPort timer
-        if (this.times['viewPort']['started'] > 0)
-        {
+        if (this.times['viewPort']['started'] > 0) {
             this.times['viewPort']['segments'].push({
                 "startedAt": this.times['viewPort']['started'],
                 "endedAt": this.timer.totalSeconds
@@ -280,8 +324,7 @@ export class VideoPlayer
             this.times['viewPort']['started'] = 0;
         }
         // Handle mute timer
-        if (this.times['muted']['started'] > 0)
-        {
+        if (this.times['muted']['started'] > 0) {
             this.times['muted']['segments'].push({
                 "startedAt": this.times['muted']['started'],
                 "endedAt": this.timer.totalSeconds
@@ -291,33 +334,28 @@ export class VideoPlayer
         // Handle focus timer
     }
 
-    playVideo()
-    {
+    playVideo() {
         // Reassign the innerHtml of the play-pause element to be "Pause"
         this.playPauseBtn.innerHtml = "Pause";
         this.timer.start();
         this.video.play();
         // Handle viewPort timer
-        if (this.videoInViewport())
-        {
+        if (this.videoInViewport()) {
             this.times['viewPort']['started'] = this.timer.totalSeconds;
         }
 
         // Handle mute timer
-        if (this.video.muted)
-        {
+        if (this.video.muted) {
             this.times['muted']['started'] = this.timer.totalSeconds;
         }
         // Handle focus timer
     }
 
-    muteVideo()
-    {
+    muteVideo() {
         this.video.muted = !this.video.muted;
     }
 
-    getStats()
-    {
+    getStats() {
         // NOTE this does NOT account for if some one seeksforward then back to where they were
         // it might think they missed time but idk.
         const progress = Math.floor((this.timer.totalSeconds / this.video.duration) * 100)
@@ -341,8 +379,7 @@ export class VideoPlayer
             'viewPort': {
                 "time": () => {
                     var timeInViewPort = 0;
-                    for (var i; ++i; i < this.times['viewPort']['segments'].length)
-                    {
+                    for (var i; ++i; i < this.times['viewPort']['segments'].length) {
                         var currentEntry = this.times['viewPort']['segments'][i]
                         var difference = currentEntry['endedAt'] - currentEntry['startedAt']
                         timeInViewPort += difference
@@ -354,8 +391,7 @@ export class VideoPlayer
             'mute': {
                 "time": () => {
                     var timeMuted = 0;
-                    for (var i; ++i; i < this.times['muted']['segments'].length)
-                    {
+                    for (var i; ++i; i < this.times['muted']['segments'].length) {
                         var currentEntry = this.times['muted']['segments'][i]
                         // 80 - 50 == 30 Sec
                         var difference = currentEntry['endedAt'] - currentEntry['startedAt']
@@ -373,24 +409,22 @@ export class VideoPlayer
         var posSeekTotal = 0;
         var negSeekTotal = 0;
         // Aggregate the positive seeks
-        for (var timeDicts of this.seeks['pos'])
-        {
+        for (var timeDicts of this.seeks['pos']) {
             posSeekTotal += timeDicts['endedAt'] - timeDicts['startedAt'];
             stats['seekInfo']['timesSeeked'] += 1;
             // Only track forward skips, not backwards.
             stats['seekInfo']['clips']['skipped'].push({
                 "startedAt": timeDicts['startedAt'],
-                "endedAt": timeDicts['endedAt'] 
+                "endedAt": timeDicts['endedAt']
             });
         }
         // Aggregate the negative seeks
-        for (var timeDicts of this.seeks['neg'])
-        {
+        for (var timeDicts of this.seeks['neg']) {
             negSeekTotal -= timeDicts['startedAt'] - timeDicts['endedAt']
             stats['seekInfo']['timesSeeked'] += 1
             stats['seekInfo']['clips']['replayed'].push({
                 "startedAt": timeDicts['startedAt'],
-                "endedAt": timeDicts['endedAt'] 
+                "endedAt": timeDicts['endedAt']
             });
         }
         // Record Total time skipped
@@ -401,16 +435,14 @@ export class VideoPlayer
         return stats;
     }
 
-    getHtml()
-    {
+    getHtml() {
         var html = `
-        <div id="`+this.id+`-player-container">
+        <div id="`+ this.id + `-player-container">
             <!-- Video -->
             <figure id="`+ this.id + `-video-container">
                 <video id="`+ this.id + `-video" controls preload="metadata" poster="img/poster.jpg">
-                    <source src="`+ this.src +`" type="video/mp4">
+                    <source src="`+ this.src + `" type="video/mp4">
                 </video>
-                <figcaption>&copy; Breakthrough Harvest PCG. Ottawa, Ohio | <a href="https://breakthroughharvest.com">breakthroughharvest.com</a></figcaption>
             </figure>
             <!-- Controls -->
             <ul id="`+ this.id + `-video-controls" data-state="hidden">
@@ -431,170 +463,15 @@ export class VideoPlayer
         `
     }
 
-    /**
-    * Bind all the events we need
-    * @summary If the description is long, write your summary here. Otherwise, feel free to remove this.
-    * @param {ParamDataTypeHere} parameterNameHere - Brief description of the parameter here. Note: For other notations of data types, please refer to JSDocs: DataTypes command.
-    * @return {ReturnValueDataTypeHere} Brief description of the returning value here.
-    */
-    bindEvents()
-    {
-        // Handle leaving the page
-        window.onbeforeunload = function() {
-            var csrfToken = document.getElementById("avcrftfsi").value;
-            const analyticsUrl = "/analytics/record_video_stats/";
-            var csrfData = {'csrfmiddlewaretoken': csrfToken, 'data': this.collectVideoInfo()}
-            const data = JSON.stringify(csrfData);
-            // We can use navigator.sendBeacon()
-            if(getBrowser() != "IE")
-            {
-                if (info !== null || undefined || {})
-                {
-                    navigator.sendBeacon(
-                        url=analyticsUrl,
-                        data=data
-                    );
-                }
-            }else{
-                $.ajaxSetup({
-                    beforeSend: function(xhr)
-                    {
-                        xhr.setRequestHeader('Csrf-Token', csrfToken);
-                    }
-                });
-                $.ajax({
-                    url: analyticsUrl,
-                    data: data,
-                    method: "POST",
-                    success : function(){
-                        console.log("")
-                    },
-                    error : function(){
-                        console.log("Apparently there was an error...")
-                    }
-                });
-            }
-        }
-
-        // Handle Play/Pause events
-        this.playPauseBtn.addEventListener('click', function(e) {
-            if (this.video.paused || this.video.ended){
-                this.playVideo();
-            } else {
-                this.pauseVideo();
-            }
-        });
-        // Handle the progress bar
-        this.video.addEventListener('timeupdate', () => {
-            if (!this.progress.getAttribute('max'))
-            {
-                this.progress.setAttribute('max', this.video.duration);
-                this.progress.value = this.video.currentTime;
-                this.progressBar.style.width = Math.floor((this.video.currentTime / this.video.duration) * 100) + "%";
-            }
-        });
-        // Handle seeking
-
-           //////////////////////////////////////////////////////////////////////////////////////////////////////
-          //// WARNING: THIS DOES NOT ACCOUNT FOR DRAGGING THE PROGRESS BAR. Keep an eye on that as it may  ////
-         ////                      cause an obscene amount of entries in the array!!!                      ////
-        //////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        this.progress.addEventListener('click', function(e) {
-            var rect = this.getBoundingClientRect();
-            var pos = (e.pageX - rect.left) / this.offsetWidth;
-            var seeked = {};
-            // translates to [[5368, 75212]]
-            seeked[this.video.currentTime] = pos;
-            if (pos < 0)
-            {
-                this.seeks['neg'].push(seeked);
-            }
-            if (pos > 0)
-            {
-                this.seeks['pos'].push(seeked);
-            }
-            this.video.currentTime = pos * this.video.duration;
-        })
-        // Handle Fullscreen
-        var fullScreenEnabled = !!(document.fullscreenEnabled || document.mozFullScreenEnabled || document.msFullscreenEnabled || document.webkitSupportsFullscreen || document.webkitFullscreenEnabled || document.createElement('video').webkitRequestFullScreen);
-        if (!fullScreenEnabled){
-            this.fullScreenBtn.style.display = "none";
-        }
-        this.fullScreenBtn.addEventListener('click', () => {
-            this.handleFullScreen();
-        })
-        this.isFullScreen = function() {
-            // document.requestFullscreen might be wrong. it used to be document.fullscreen
-            return !!(document.requestFullscreen || document.webkitIsFullScreen || document.mozFullScreen || document.msFullscreenElement || document.fullscreenElement);
-         }
-         document.addEventListener('fullscreenchange', function(e) {
-            // document.requestFullscreen might be wrong. it used to be document.fullscreen
-            setFullscreenData(!!(document.requestFullscreen || document.fullscreenElement));
-         });
-         document.addEventListener('webkitfullscreenchange', function() {
-            setFullscreenData(!!document.webkitIsFullScreen);
-         });
-         document.addEventListener('mozfullscreenchange', function() {
-            setFullscreenData(!!document.mozFullScreen);
-         });
-         document.addEventListener('msfullscreenchange', function() {
-            setFullscreenData(!!document.msFullscreenElement);
-         });
-
-         // Handle ViewPort Tracking
-         window.addEventListener('scroll', () => {
-            this.handleViewPortTracking();
-         })
-
-         // Handle mute tracking
-         this.muteBtn.addEventListener('click', () => {
-             if (this.video.playing)
-             {
-                // Recording and not muted
-                if (this.times['muted']['started'] > 0 && !this.video.muted)
-                {
-                    this.times['muted']['segments'].push({
-                        "startedAt": this.times['muted']['started'],
-                        'endedAt': this.timer.totalSeconds
-                    });
-                    this.times['muted']['started'] = 0;
-                }
-                else if (this.times['muted']['started'] === 0 && this.video.muted)
-                {
-                    // Not recording and muted
-                    this.times['muted']['started'] = this.timer.totalSeconds;
-                }
-             }
-             else
-             {
-                 // Not playing and recording (this shouldn't happen, pauseVideo should take care of this)
-                 // I guess it's a fallback now.
-                 if (this.times['muted']['started'] > 0)
-                {
-                    this.times['muted']['segments'].push({
-                        "startedAt": this.times['muted']['started'],
-                        'endedAt': this.timer.totalSeconds
-                    });
-                    this.times['muted']['started'] = 0;
-                }
-             }
-        })
-    }
-
-    handleViewPortTracking()
-    {
+    handleViewPortTracking() {
         var recordingStarted = this.times['viewPort']['started']
-        if (this.video.playing)
-        {
+        if (this.video.playing) {
             // Is in view port and currently not recording time spent in it
-            if (this.videoInViewport() && recordingStarted === 0)
-            {
+            if (this.videoInViewport() && recordingStarted === 0) {
                 this.times['viewPort']['started'] = this.timer.totalSeconds;
             }
             // Not in view port and we're currently recording time spent in it
-            if (!this.videoInViewport() && recordingStarted > 0)
-            {
+            if (!this.videoInViewport() && recordingStarted > 0) {
                 // Stop recording, push new sequence and set started to 0
                 this.times['viewPort']['segments'].push({
                     "startedAt": started,
@@ -604,8 +481,7 @@ export class VideoPlayer
             }
         }
         // Not playing, shouldn't be recording but I guess it's a fallback now.
-        else if (recordingStarted > 0)
-        {
+        else if (recordingStarted > 0) {
             this.times['viewPort']['segments'].push({
                 "startedAt": recordingStarted,
                 "endedAt": this.timer.totalSeconds
@@ -616,21 +492,71 @@ export class VideoPlayer
 
 }
 
-function injectPlayer(element, src, id=null)
+
+
+class Timer
 {
-    if (id === null)
+    constructor()
     {
-        id = element.id;
+        this.runTimer;
+        this.totalSeconds = 0;
+        this.seconds = 0;
+        this.minutes = 0;
+        this.hours = 0;
+        // If we get to this point, you may want to add an event listener to EVERYTHING
+        // and if nothing is clicked, no scrolling, no mouse movement, you may want to log the person out
+        this.days = 0;
     }
-    // Initialize the usedPlayers array if it isn't already
-    if (globalThis.usedPlayers === undefined || globalThis.usedPlayers === null)
+
+    start()
     {
-        globalThis.usedPlayers = [];
+        if (!this.isRunning)
+        {
+            this.isRunning = true;
+            this.runTimer = setInterval(() => {
+                // If we're paused, allow the interval to run
+                    // Do we need to increment days? If we're here, something is seriously wrong
+                    if (this.hours == 24)
+                    {
+                        this.hours = 0;
+                        ++this.days;
+                    }
+                // Hours, maybe?
+                    if (this.minutes == 60)
+                    {
+                        this.minutes = 0;
+                        ++this.hours;
+                    }
+                // How about minutes?
+                    if (this.seconds == 60)
+                    {
+                        this.seconds = 0;
+                        ++this.minutes;
+                    }
+                    ++this.seconds;
+                    ++this.totalSeconds;
+                }, 1000
+            );
+        }
     }
-    var player = new VideoPlayer(src, id);
-    // Remove the thumbnail
-    element.removeChild(element.childNodes[0])
-    // Replace the thumb nail with the video player
-    element.appendChild(player.getHtml());
-    player.initialize();
+
+    stop()
+    {
+        clearInterval(this.interval)
+        return this.getElapsed()
+    }
+
+    /**
+     * @returns Dictionary whose keys are times (hours, minutes, etc.) and keys are their values
+     *          OR a string in the format of "5 Hours, 53 Minutes and 32 Seconds"
+     */
+    getElapsed(asString=true)
+    {
+        if (asString)
+        {
+            return this.hours+" Hours, "+this.minutes+" Minutes and "+this.seconds+" Seconds";
+        }
+        return {'days': this.days,'hours': this.hours, 'minutes': this.minutes, 'seconds': this.seconds}
+    }
+
 }
