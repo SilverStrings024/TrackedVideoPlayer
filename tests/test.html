@@ -1,0 +1,29 @@
+<html>
+    <body>
+        <head>
+            <script src="../player.js"></script>
+        </head>
+        <div id="players">
+        </div>
+
+        <script>
+            // Listen for load to inject some players
+            window.addEventListener('load', () => {
+                console.log(window.playerManager.thumbnail)
+                console.log("doing things");
+                // This should also test the culling feature as well since there
+                // are 100 players
+                for (let i of Array.from({length: 100}, (value, key) => key)){
+                    console.log("Attempting to append child", i);
+                    document.getElementById('players').innerHTML = document.getElementById('players').innerHTML + "<div class='container'><img src='../defaultThumb.png' onclick='injectPlayer(this)' id='"+i+"'+/></div><br/>";
+                }
+                document.getElementById('players').innerHTML = document.getElementById('players').innerHTML + "WHY?!"
+            })
+            function injectPlayer(elem){
+                console.log("Injecting player...")
+                const testSrc = "https://www.appsloveworld.com/wp-content/uploads/2018/10/640.mp4";
+                window.playerManager.injectVideo(elem.getAttribute("id"), src=testSrc, videoId="video-"+elem.getAttribute("id"));
+            }
+        </script>
+    </body>
+</html>
