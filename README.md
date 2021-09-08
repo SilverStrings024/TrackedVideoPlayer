@@ -21,7 +21,18 @@ This video player is fully self contained, records how long a person has watched
 If you find a way to cheat the player please either submit a pull request or an issue and I will get to it asap!
 
 ## **Ignore everything from here down** - because this isn't done and this file is a WIP
-### Usage
+# Contents
+<br/>
+1. [QuickStart](#quickstart)<br/>
+2. [Usage](#usage)<br/>
+3. [Configuration](#configuration)<br/>
+4. [How Things Work](#how-things-work)<br/>
+    1. [Viewport Tracking](#viewport-tracking)<br/>
+    2. [Focus Tracking](#focus-tracking)<br/>
+    3. [Manager Communicaton](#manager-communication)<br/>
+    4. [Player Culling](#player-culling)<br/>
+
+# Usage
 [ **NOTE** ] This will attempt to replace the `innerHtml` of the parent node of whatever element holds the onclick that will inject the player, please account for this in your page source code.
 
 To start, you'll need to do the normal thing and either clone the repo somewhere into your project then load player.js into your html
@@ -45,7 +56,7 @@ You can provide a thumbnail for the video to display but if you don't the use wi
 **NOTE:** a maximum of 3 videos will be loaded at the same time and the order in which they are removed (See [Auto Culling](#culling-videos)) follows FIFO.
 
 
-### Culling Videos [**NOT IMPLEMENTED**]
+## Culling Videos [**NOT IMPLEMENTED**]
 To prevent a memory leak/too much consumption, the player manager will keep track of all rendered/injected video players. Each time a new video is injected, the Player Manager will check and see how many videos are currently loaded; if there will be more than 3 videos that would be loaded after injecting the new one, it will check if any videos are outside of the viewport. If any videos are indeed outside of the view port, then it will record the elapsed time of the player, destroy its html and all references to its object, then it will replace the html with the default "thumbnail" or the thumbnail you provided.<br/>
 
 #### How about multiple windows?
