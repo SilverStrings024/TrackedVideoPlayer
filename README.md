@@ -31,6 +31,14 @@ If you find a way to cheat the player please either submit a pull request or an 
     3. [Manager Communicaton](#manager-communication)<br/>
     4. [Player Culling](#player-culling)<br/>
 
+# QuickStart
+1. Clone the repo or add the following to your `<head>` tag `<script src="https://cdn.jsdelivr.net/gh/SilverStrings024/TrackedVideoPlayer/player.js"></script>`<br/>
+2. [Configure the manager](#configuration) or use the defaults<br/>
+3. Bind `window.playerManager.injectPlayer(this, <video source here>, <Optional video id here>, <start time in seconds here...defaults to 0>)` to the `onclick` event of whatever element is to be replaced with a player.<br/>
+Make sure it works by loading up your page, clicking a few videos (be sure to click more than your set max to test culling), and making sure the controls work.<br/>
+Note that it would be smart to make sure the managers can communicate by opening a new window/tab (in the same browser) and running the same test.<br/>
+You **should** see that the managers will cull any videos outside of the viewport on each new injection and cull the oldest videos if there are more than the max amount of players in each windows viewport.<br/>
+
 # Usage
 [ **NOTE** ] This will attempt to replace the `innerHtml` of the parent node of whatever element holds the onclick that will inject the player, please account for this in your page source code.
 
