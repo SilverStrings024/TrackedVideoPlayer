@@ -22,7 +22,6 @@ If you find a way to cheat the player please either submit a pull request or an 
 
 ## **Ignore everything from here down** - because this isn't done and this file is a WIP
 # Contents
-<br/>
 1. [QuickStart](#quickstart)<br/>
 2. [Usage](#usage)<br/>
 3. [Configuration](#configuration)<br/>
