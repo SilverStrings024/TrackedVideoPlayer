@@ -1,7 +1,8 @@
 ## WARNINGS
 This player uses the `BroadcastChannel` web API which is **NOT** compatible with some browsers. [Refer to the compatibility chart](https://developer.mozilla.org/en-US/docs/Web/API/Broadcast_Channel_API#browser_compatibility)<br/>
-**This is NOT DONE** and has 0 optimizations. Unless you fix it yourself, I would highly recommend not using this in anything except personal/practice projects.
+Also, pay very close attention to the "Where it will work" section of [this link](https://www.digitalocean.com/community/tutorials/js-broadcastchannel-api).
 
+**This is NOT DONE** and has 0 optimizations. Unless you fix it yourself, I would highly recommend not using this in anything except personal/practice projects.
 
 I'm still adapting this from a past project so there may be some left over project specific code.
 
