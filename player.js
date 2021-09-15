@@ -7,14 +7,16 @@
 * And more
 * @author Matthew Amstutz <silverpython25@gmail.com>
 * @copyright Matthew Amstutz 2021
+* @license MIT License
 */
 
 // Initialize the players array and manager if they don't already exist
-window.onload(() => {
-    globalThis.playerManager = globalThis.playerManager || new PlayerManager(channel = new BroadcastChannel("playerManager"));
+window.addEventListener('load', () => {
+    window.playerManagerChannel = window.playerManagerChannel || new BroadcastChannel("playerManagers");
+    window.playerManager = window.playerManager || new PlayerManager(channel=window.playerManagerChannel);
 })
-window.onbeforeunload(() => {
-    globalThis.playerManager.closeChannel();
+window.addEventListener('beforeunload', () => {
+    window.playerManager.closeChannel();
 })
 
 /**
@@ -38,12 +40,16 @@ window.onbeforeunload(() => {
 *
 ** Handle html injection
 */
+
 class PlayerManager {
 
     // Require a channel
     constructor(channel) {
+        this.id = this.comms.generateId();
         this.channel = channel;
-        this.channel.onmessage = this.receive(e);
+        this.channel.onmessage = (e) => {
+            this.receive(e);
+        };
         // Holds player ids, thumbnail src, elapsed time, and last known stats
         this.players = {};
         this.playing = [];
@@ -53,12 +59,12 @@ class PlayerManager {
 
     collectVideoInfo() {
         // Collect all the information possible
-        var data = {}
+        var data = {};
         for (let usedPlayer of this.players) {
             // produces {1: {'timeWatched': 2000, 'timeSeeked': 1000}, 2: {'progress': "50%", 'timeWatched': 10000}}
             data[usedPlayer.id] = usedPlayer.getStats();
         }
-        return data
+        return data;
     }
 
     createPlayer(id = null) {
@@ -67,33 +73,89 @@ class PlayerManager {
         }
     }
 
-    // Channel handling
+    getPlayer(playerId){
+        if (this.players[playerId].object ?? "" !== ""){
+            return this.players[playerId].object
+        }
+        else{
+            throw new Error("ERROR: No player object was found with id "+playerId)
+        }
+    }
 
+    // Channel handling
     closeChannel() {
         this.channel.close();
     }
 
-    send(message) {
-        this.channel.postMessage(message);
+    send(object) {
+        // As there is only one manager per page,the event should fire
+        // However, this needs tested to be 100% certain!
+
+        object['manager'] = this.id;
+        this.channel.postMessage(object);
     }
 
+
+    /**
+    * Example of incoming dictionary
+    {
+        "to": <0 or some manager id>,
+        "from": <manager id>,
+        "command": {
+            "method": "cullPlayers",
+            "args": [],
+            "sendReturn": false,
+        }
+    }
+    */
+
+    /**
+    * Handle a new message from the broadcast channel....Should this be 100% async?
+    * @param {MessageEvent} event - The messageEvent fired by the manager broadcast channel
+    * @returns {Integer} 0
+    */
     receive(event) {
-        const message = event.data
-        if (message.indexOf("kill") !== -1) {
-            // Kill whatever player
-            const player = document.getElementById(message.split("-")[-1]);
-            this.replaceWithThumbnail(player);
-        }
-        else if (message.indexOf('starting') !== -1) {
-            // Stop any currently playing videos that don't have
-            // the id of the player that's starting
-        }
-        else if (!message) {
+        const data = event.data;
+        // Make sure it's for this (or all) manager(s)
+        if (data.to == this.id || data.to == 0){
+            // Receiving command execution request
+            if (data?.command ?? "" !== ""){
+                // Execute command and send response
+                // This may cause an issue if some method doesn't take any args
+                data.command.result = window.playerManager[data.command.method](...data.command.args);
+                if (data.command.sendReturn){
+                    data.to = data.from;
+                    data.from = this.id;
+                    console.log("DEBUG: Command "+data.command.method+" was executed by manager "+this.id+" with return"+ data.command.result +" as requested by manager "+data.from);
+                    this.send(data);
+                    return 0;
+                }
+                console.log("DEBUG: Command "+data.command.method+" was executed by manager "+this.id+" as requested by manager "+data.from);
+            }
+            else if (data?.starting ?? "" !== "") {
+                // Stop any currently playing videos that don't have
+                // the id of the player that's starting
+                if (this.playing.length > 0){
+                    for (let playerId of this.playing.length){
+                        this.pauseVideo(playerId);
+                    }
+                }
+            }
+            else if (!message) {
 
+            }
         }
-
+        else{
+            // Do nothing, the request isn't for this manager
+            console.log("DEBUG: Message sent to manager "+data.to+" from manager "+data.from+". Manager "+this.id+" is ignoring it!");
+        }
     }
 
+    /**
+    * Replace a players html with its thumbnail, dump all data related to it to its entry in this.players, then remove all references to it so it can be garbage collected
+    * @param {VideoPlayer} player - The video player object to be replaced
+    * @return No return
+    */
     replaceWithThumbnail(player) {
         // Get the image from the player
         // Pause the player
@@ -102,17 +164,24 @@ class PlayerManager {
         // Replace the player with its thumbnail
     }
 
-    injectVideo(parentElemId, src, videoId="") {
-        // Add a new key to this.players and run cullPlayers;
-        this.players[parentElemId] = {};
+    injectPlayer(ogElem, src, videoId="", elapsed=0) {
+
+        // Add a new key to this.players and run cullPlayers
+        this.players[videoId] = {};
         this.cullPlayers();
-        let player = new VideoPlayer(src=src, id=videoId);
+        let player = new VideoPlayer(src, videoId);
         this.players[videoId] = {
             'object': player,
             'src': src,
-            'parent': parentElemId,
-            'id': videoId
+            'ogElem': {},
+            'id': videoId,
+            'elapsed': elapsed,
+            'added': new Date()
         }
+        this.players[videoId].ogElem['id'] = ogElem.id;
+        this.players[videoId].ogElem['tag'] = ogElem.tagName;
+        this.players[videoId].ogElem['class'] = ogElem?.className ?? "";
+        document.getElementById(ogElem.id).parentNode.innerHTML = player.getHtml();
     }
 
     isInViewPort(playerElem) {
@@ -125,28 +194,115 @@ class PlayerManager {
         );
     }
 
-    cullPlayers() {
+    /**
+    * Remove any players that are no longer needed.
+    * NOTE: If a player is about to be started, it should be added to the players object. This method relies on that
+    */
+    cullPlayers() { // NOT DONE
         // Do we need to cull?
-        if (Object(this.players).keys().length > this.maxPlayers){
+        if (Object.keys(this.players).length > this.maxPlayers){
             let mustCull = [];
+            // Go through the players we have stored
             for (let player of this.players){
                 const playerElem = document.getElementById(player.id);
+                // Remove whatever isn't in the viewport
                 if(!this.isInViewPort(playerElem)){
-                    player.object = null;
                     // Record info
+                    const stats = player.getStats();
+                    this.players[player.id]['stats'] = stats;
+                    this.players[player.id]['elapsed'] = stats['elapsed'];
+                    player.object = null;
                     // Destroy player html
-                    // Remove reference to object
-                    continue
+                    this.replaceWithThumbnail(player);
+                    continue;
                 }
-                mustCull.append(playerElem);
-
+                // Record all videos that are in the viewport to check multiple windows
+                mustCull.append(player);
             }
             // If we still have more than the max, remove the oldest ones
+            if (mustCull.length > this.maxPlayers){
+                // Sort in place then loop it
+                for (let i; i++; i < mustCull.sort((a, b) => b.date - a.date).length){
+                    if (mustCull.length > this.maxPlayers && mustCull[i].added < mustCull[i+1].added){
+                        this.replaceWithThumbnail(mustCull[i].object);
+                    }
+                }
+            }
         }
     }
 
     bindEvents() {
     }
+
+    // Controls
+    muteVideo(playerId) {
+        const videoElem = this.getPlayer(playerId).videoElem;
+        videoElem.muted = !video.muted;
+    }
+
+    alterVolume(playerId, direction){
+        const videoElem = this.getPlayer(playerId).videoElem;
+        var currentVolume = Math.floor(videoElem.volume * 10) / 10;
+        if (direction === "+") {
+            if (currentVolume < 1) {
+                videoElem.volume += 0.1;
+            } else {
+                console.log("\n\nAttempted to go over max volume\n\n")
+            }
+        }
+        else if (dir === "-") {
+            if (currentVolume > 0) {
+                videoElem.volume -= 0.1;
+            }
+        } else {
+            throw new Error("Pass either + or - to alter the volume")
+        }
+    }
+
+    playVideo(playerId) {
+        const player = this.getPlayer(playerId);
+        // Reassign the innerHtml of the play-pause element to be "Pause"
+        player.playPauseBtnElem.innerHtml = "Pause";
+        player.timer.start();
+        player.videoElem.play();
+        // Handle viewPort timer
+        if (this.isInViewport(player.videoElem)) {
+            player.times['viewPort']['started'] = player.timer.totalSeconds;
+        }
+
+        // Handle mute timer if it's muted when clicking play
+        if (player.videoElem.muted) {
+            player.times['muted']['started'] = player.timer.totalSeconds;
+        }
+        // Handle focus timer
+    }
+
+    pauseVideo(playerId)
+    {
+        const player = this.getPlayer(playerId);
+        player.playPauseBtnElem.innerText = "Play";
+        player.timer.stop();
+        player.videoElem.pause();
+        // Handle viewPort timer
+        if (player.times['viewPort']['started'] > 0)
+        {
+            player.times['viewPort']['segments'].push({
+                "startedAt": player.times['viewPort']['started'],
+                "endedAt": player.timer.totalSeconds
+            });
+            player.times['viewPort']['started'] = 0;
+        }
+        // Handle mute timer
+        if (player.times['muted']['started'] > 0)
+        {
+            player.times['muted']['segments'].push({
+                "startedAt": player.times['muted']['started'],
+                "endedAt": player.timer.totalSeconds
+            });
+            player.times['muted']['started'] = 0;
+        }
+    }
+
 }
 
 /**
@@ -180,12 +336,13 @@ class PlayerManager {
  *
  ** Implement tracking for over amplification attempts (only needed if not using a slider for volume)
 */
-export class VideoPlayer {
+class VideoPlayer {
     /** 
     * @param {String} src - The URL source of the video
     * @param {String} id - Auto generated or given player id
     */
-    constructor(src, id) {
+    constructor(src, id, thumbnail="../defaultThumb.png") {
+        this.thumbnail = thumbnail;
         this.isInViewPort;
         this.completionPercentage;
         // Used to record where they "dropped the play head" from the start
@@ -232,35 +389,33 @@ export class VideoPlayer {
 
     initialize() {
         // This assumes that the player html has already been injected into the page.
-        this.video = document.getElementById(this.id + "-video")
-        this.progress = document.getElementById(this.id + "-progress");
-        this.progressBar = document.getElementById(this.id + "-progress-bar");
+        this.videoElem = document.getElementById(this.id + "-video")
+        this.progressElem = document.getElementById(this.id + "-progress");
+        this.progressBarElem = document.getElementById(this.id + "-progress-bar");
 
         // Controls
-        this.video.controls = false;
-        this.controls = document.getElementById(this.id + "-video-controls")
-        this.controls.style.display = "block";
+        this.videoElem.controls = false;
+        this.controlsElem = document.getElementById(this.id + "-video-controls")
+        this.controlsElem.style.display = "block";
 
         // Containers
         this.playerContainer = document.getElementById(this.id + "-player-container")
         this.videoContainer = document.getElementById(this.id + "-video-container");
 
         // Buttons
-        this.fullScreenBtn = document.getElementById(this.id + "-full-screen");
-        this.playPauseBtn = document.getElementById(this.id + "-play-pause");
-        this.stop = document.getElementById(this.id + "-stop");
-        this.muteBtn = document.getElementById(this.id + "-mute");
-        this.volUp = document.getElementById(this.id + "-vol-up");
-        this.volDown = document.getElementById(this.id + "-vol-dwn");
+        this.fullScreenBtnElem = document.getElementById(this.id + "-full-screen");
+        this.playPauseBtnElem = document.getElementById(this.id + "-play-pause");
+        this.stopElem = document.getElementById(this.id + "-stop");
+        this.muteBtnElem = document.getElementById(this.id + "-mute");
+        this.volUpElem = document.getElementById(this.id + "-vol-up");
+        this.volDownElem = document.getElementById(this.id + "-vol-dwn");
         // If we can't play the video, remove the player container and tell the
         // user that we can't play it. Maybe give them a link to the youtube video
-        if (!this.video.canPlayType) {
+        if (!this.videoElem.canPlayType) {
             var failed = `<div id="unsupported-video">Unsupported video! You can find it <a class="text-blue-700" href="` + this.src + `">here</a></div>`
             this.playerContainer.parentNode.appendChild(failed);
             this.playerContainer.parentNode.removeChild(this.playerContainer);
         }
-        // Move on to binding all our events.
-        this.bindEvents();
     }
     setFullscreenData(state) {
         this.playerContainer.setAttribute('data-fullscreen', !!state);
@@ -291,68 +446,6 @@ export class VideoPlayer {
             }
             setFullscreenData(true);
         }
-    }
-
-    alterVolume(direction) {
-        var currentVolume = Math.floor(this.video.volume * 10) / 10;
-        if (direction === "+") {
-            if (currentVolume < 1) {
-                this.video.volume += 0.1;
-            } else {
-                console.log("\n\nAttempted to go over max volume\n\n")
-            }
-        }
-        else if (dir === "-") {
-            if (currentVolume > 0) {
-                this.video.volume -= 0.1;
-            }
-        } else {
-            throw new Error("Pass either + or - to alter the volume")
-        }
-    }
-
-    pauseVideo() {
-        this.playPauseBtn.innerHtml = "Play";
-        this.timer.stop();
-        this.video.pause();
-        // Handle viewPort timer
-        if (this.times['viewPort']['started'] > 0) {
-            this.times['viewPort']['segments'].push({
-                "startedAt": this.times['viewPort']['started'],
-                "endedAt": this.timer.totalSeconds
-            });
-            this.times['viewPort']['started'] = 0;
-        }
-        // Handle mute timer
-        if (this.times['muted']['started'] > 0) {
-            this.times['muted']['segments'].push({
-                "startedAt": this.times['muted']['started'],
-                "endedAt": this.timer.totalSeconds
-            });
-            this.times['muted']['started'] = 0;
-        }
-        // Handle focus timer
-    }
-
-    playVideo() {
-        // Reassign the innerHtml of the play-pause element to be "Pause"
-        this.playPauseBtn.innerHtml = "Pause";
-        this.timer.start();
-        this.video.play();
-        // Handle viewPort timer
-        if (this.videoInViewport()) {
-            this.times['viewPort']['started'] = this.timer.totalSeconds;
-        }
-
-        // Handle mute timer
-        if (this.video.muted) {
-            this.times['muted']['started'] = this.timer.totalSeconds;
-        }
-        // Handle focus timer
-    }
-
-    muteVideo() {
-        this.video.muted = !this.video.muted;
     }
 
     getStats() {
@@ -440,7 +533,7 @@ export class VideoPlayer {
         <div id="`+ this.id + `-player-container">
             <!-- Video -->
             <figure id="`+ this.id + `-video-container">
-                <video id="`+ this.id + `-video" controls preload="metadata" poster="img/poster.jpg">
+                <video id="`+ this.id + `-video" controls preload="metadata" poster="`+this.thumbnail+`">
                     <source src="`+ this.src + `" type="video/mp4">
                 </video>
             </figure>
@@ -454,13 +547,14 @@ export class VideoPlayer {
                     </progress>
                 </li>
                 <li><button id="`+ this.id + `-mute" type="button" data-state="mute">Mute/Unmute</button></li>
-                <li><button id="`+ this.id + `-vol-up" type="button" data-state="volup">Vol+</button></li></li>
-                <li><button id="`+ this.id + `-vol-dwn" type="button" data-state="voldown">Vol-</button></li>
+                <li><button id="`+ this.id + `-vol-up" type="button" onclick='playerManager.alterVolume(`+ this.id +`, "+")' data-state="volup">Vol+</button></li></li>
+                <li><button id="`+ this.id + `-vol-dwn" type="button" onclick='playerManager.alterVolume(`+ this.id +`, "-")' data-state="voldown">Vol-</button></li>
                 <li><button id="`+ this.id + `-full-screen" type="button" data-state="go-fullscreen">Fullscreen</button></li>
             </ul>
         <!-- End player-container -->
         </div>
         `
+        return html
     }
 
     handleViewPortTracking() {
